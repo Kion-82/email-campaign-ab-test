@@ -1,10 +1,12 @@
 """Database connection utilities for the project."""
 
 import os
-
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine, URL
+from pathlib import Path
+import pandas as pd
+from sqlalchemy import text
 
 # Load environment variables from the .env file in the project root
 load_dotenv()
@@ -27,3 +29,18 @@ def get_engine() -> Engine:
     # local_infile must be enabled on the client as well as the server
     # to allow LOAD DATA LOCAL INFILE for bulk CSV imports.
     return create_engine(url, connect_args={"local_infile": True})
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SQL_DIR = PROJECT_ROOT / "sql"
+
+
+def read_sql_file(filename: str, engine: Engine | None = None) -> pd.DataFrame:
+    """Run a single SELECT statement stored in sql/<filename> and return the result.
+
+    Keeping queries in .sql files (rather than as strings in notebooks) means the
+    same query can be run from the MySQL client or from Python.
+    """
+    engine = engine or get_engine()
+    query = (SQL_DIR / filename).read_text(encoding="utf-8")
+    with engine.connect() as conn:
+        return pd.read_sql(text(query), conn)
