@@ -3,6 +3,7 @@
 from math import sqrt
 from scipy import stats
 import pandas as pd
+import numpy as np
 
 def diff_in_proportions(
     successes_t: float, n_t: float, successes_c: float, n_c: float, alpha: float = 0.05
@@ -31,6 +32,7 @@ def diff_in_proportions(
         "treatment_value": p_t,
         "control_value": p_c,
         "diff": diff,
+        "se": se_unpooled,
         "ci_low": diff - z_crit * se_unpooled,
         "ci_high": diff + z_crit * se_unpooled,
         "relative_lift": diff / p_c,
@@ -66,6 +68,7 @@ def diff_in_means_welch(
         "treatment_value": mean_t,
         "control_value": mean_c,
         "diff": diff,
+        "se": se,
         "ci_low": diff - t_crit * se,
         "ci_high": diff + t_crit * se,
         "relative_lift": diff / mean_c,
@@ -99,3 +102,26 @@ def compare_arms(
     df = pd.DataFrame(results).T.rename_axis("metric").reset_index()
     df.insert(0, "comparison", f"{treatment} vs {control}")
     return df
+
+def heterogeneity_test(effects, ses) -> dict:
+    """Cochran's Q test: do several independent effect estimates differ more than chance?
+
+    Each estimate is weighted by its precision (1 / SE^2). Under the null hypothesis
+    that all true effects are equal, Q follows a chi-square distribution with k - 1
+    degrees of freedom, where k is the number of estimates. The estimates must come
+    from non-overlapping groups so that they are independent.
+    """
+    effects = np.asarray(effects, dtype=float)
+    weights = 1 / np.asarray(ses, dtype=float) ** 2
+
+    pooled_effect = np.sum(weights * effects) / np.sum(weights)
+    q_stat = np.sum(weights * (effects - pooled_effect) ** 2)
+    df = len(effects) - 1
+    p_value = stats.chi2.sf(q_stat, df)
+
+    return {
+        "pooled_effect": pooled_effect,
+        "q_stat": q_stat,
+        "df": df,
+        "p_value": p_value,
+    }
